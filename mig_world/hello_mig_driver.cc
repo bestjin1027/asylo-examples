@@ -19,6 +19,7 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <cstring>
 
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
@@ -76,7 +77,26 @@ void initiate_enclave(int signo)
 			LOG(FATAL) << "fork failed";
 		} else if (pid >0) {
 			// wait a second for restarting aesmd service
-			sleep(1);
+			// system("sudo service aesmd restart");
+			
+			//check aesmd service status
+			char buff_aesmd[2];
+			FILE *fp_aesmd;
+			while(1){
+				fp_aesmd = popen("/home/vsgx_v0.5.2/aesmd_check.sh", "r");
+				if(fp_aesmd == NULL){
+					LOG(FATAL) << "popen failed";
+					break;
+				}
+				fgets(buff_aesmd, 2, fp_aesmd);
+				fclose(fp_aesmd);
+				if(strcmp(buff_aesmd, "1"))
+					LOG(INFO) << "waiting aesmd restrt...";
+				else {
+					LOG(INFO) << "aesmd service restarted";
+					break;
+				}
+			}
 			asylo::EnclaveManager::Configure(asylo::EnclaveManagerOptions());
 			auto manager_result = asylo::EnclaveManager::Instance();
 			if (!manager_result.ok()) {
@@ -96,7 +116,8 @@ void initiate_enclave(int signo)
 			return;
 		} else {
 			//child exec. restart aesmd service
-			execl("/usr/bin/sudo", "sudo", "service", "aesmd", "restart", 0);
+			//execl("/usr/bin/sudo", "sudo", "service", "aesmd", "restart", 0);
+			execl("/usr/bin/sudo", "sudo", "/home/vsgx_v0.5.2/aesmd.sh", 0);
 			exit(0);
 		}
 	} else {
@@ -305,9 +326,6 @@ int main(int argc, char *argv[]) {
     LOG(QFATAL) << "Load " << absl::GetFlag(FLAGS_enclave_path)
                 << " failed: " << status;
   }
-/*  asylo::primitives::SgxEnclaveClient *sgxclient =
-		dynamic_cast<asylo::primitives::SgxEnclaveClient *>(
-      asylo::primitives::EnclaveSignalDispatcher::GetInstance()->GetClientForSignal(0));*/
 
     asylo::GenericEnclaveClient *client_ = reinterpret_cast<asylo::GenericEnclaveClient *>(
         manager->GetClient("hello_enclave"));
@@ -320,7 +338,6 @@ int main(int argc, char *argv[]) {
   enc_base = primitive_client_->GetBaseAddress();
   client = (asylo::primitives::SgxEnclaveClient *)primitive_client_.get();
   LOG(INFO) << "enc_base: " << enc_base;
-
 
   // Part 2: Secure execution
 
